@@ -3,6 +3,27 @@ const Hapi = require("@hapi/hapi");
 const axios = require("axios");
 const Basic = require("@hapi/basic");
 
+function cleanAndParseJson(jsonString) {
+  // Replace unquoted string values with quoted ones
+  // This regex finds values that are unquoted strings
+  jsonString = jsonString.replace(/:\s*([a-zA-Z_]\w*)/g, ': "$1"');
+
+  // Optional: Handle specific known invalid values
+  jsonString = jsonString.replace(
+    /"akrcwohoahoohuc":\s*"[^"]*"/,
+    '"akrcwohoahoohuc": null'
+  );
+
+  // Now parse the cleaned JSON string
+  try {
+    const jsonObject = JSON.parse(jsonString);
+    return jsonObject;
+  } catch (e) {
+    console.error("Error parsing JSON:", e);
+    return null;
+  }
+}
+
 // Fonction de validation pour l'authentification
 const validate = async (request, username, password, h) => {
   // Vérifier si le nom d'utilisateur est "Luke" et le mot de passe "DadSucks"
@@ -44,7 +65,7 @@ const init = async () => {
     },
     handler: async (request, h) => {
       // Récupération des paramètres de la requête
-      const { type, query } = request.query;
+      const { type, query, format } = request.query;
 
       // Vérification si les paramètres sont fournis
       if (!type || !query) {
@@ -54,12 +75,16 @@ const init = async () => {
       }
 
       // Construction de l'URL vers l'API SWAPI
-      const apiUrl = `https://swapi.dev/api/${type}/?search=${query}`;
+      let apiUrl = `https://swapi.dev/api/${type}/?search=${query}`;
+
+      if (format === "wookiee") apiUrl += "&format=wookiee";
 
       try {
         // Appel à SWAPI avec axios
         const response = await axios.get(apiUrl);
-        const data = response.data;
+        let data = response.data;
+
+        if (format === "wookiee") data = cleanAndParseJson(data);
 
         // Retourner les données reçues de SWAPI
         return h.response(data).code(200);
@@ -86,7 +111,7 @@ const init = async () => {
     },
     handler: async (request, h) => {
       // Récupération des paramètres de la requête
-      const { type, id } = request.query;
+      const { type, id, format } = request.query;
 
       // Vérification si les paramètres sont fournis
       if (!type || !id) {
@@ -96,7 +121,9 @@ const init = async () => {
       }
 
       // Construction de l'URL vers l'API SWAPI
-      const apiUrl = `https://swapi.dev/api/${type}/${id}`;
+      let apiUrl = `https://swapi.dev/api/${type}/${id}/`;
+
+      if (format === "wookiee") apiUrl += "?format=wookiee";
 
       try {
         // Appel à SWAPI avec axios
