@@ -1,7 +1,13 @@
+require("dotenv").config();
+
 // Importation des modules
 const Hapi = require("@hapi/hapi");
 const axios = require("axios");
-const Basic = require("@hapi/basic");
+const jwt = require("jsonwebtoken");
+
+const JWT_SECRET = process.env.JWT_SECRET;
+const USERNAME = process.env.USERNAME;
+const PASSWORD = process.env.PASSWORD;
 
 function cleanAndParseJson(jsonString) {
   // Replace unquoted string values with quoted ones
@@ -24,16 +30,9 @@ function cleanAndParseJson(jsonString) {
   }
 }
 
-// Fonction de validation pour l'authentification
-const validate = async (request, username, password, h) => {
-  // Vérifier si le nom d'utilisateur est "Luke" et le mot de passe "DadSucks"
-  if (username === "Luke" && password === "DadSucks") {
-    // Si les informations sont correctes, on retourne les détails de l'utilisateur
-    return { isValid: true, credentials: { user: username } };
-  } else {
-    // Sinon, l'authentification échoue
-    return { isValid: false };
-  }
+// Sample function to sign a JWT
+const createToken = (user) => {
+  return jwt.sign({ username: user.username }, JWT_SECRET, { expiresIn: "1h" });
 };
 
 // Fonction asynchrone pour démarrer le serveur
@@ -44,21 +43,51 @@ const init = async () => {
     host: "localhost",
   });
 
-  // Enregistrement du plugin d'authentification de base
-  await server.register(Basic);
+  // Register JWT authentication strategy
+  await server.register(require("hapi-auth-jwt2"));
 
-  // Définir une stratégie d'authentification avec le schéma 'basic'
-  server.auth.strategy("simple", "basic", { validate });
+  server.auth.strategy("jwt", "jwt", {
+    key: JWT_SECRET, // Secret key for JWT
+    validate: (decoded, request, h) => {
+      // Add custom validation logic if needed
+      return { isValid: true };
+    },
+    verifyOptions: { algorithms: ["HS256"] },
+  });
 
-  // Appliquer cette stratégie comme méthode d'authentification par défaut
-  server.auth.default("simple");
+  server.auth.default("jwt"); // Require JWT by default for all routes except for login
+
+  // Login Route (No authentication required here)
+  server.route({
+    method: "POST",
+    path: "/login",
+    options: {
+      auth: false,
+      cors: {
+        origin: ["*"], // You can specify specific origins instead of '*'
+      },
+    },
+    handler: (request, h) => {
+      const { username, password } = request.payload;
+      try {
+        if (username === USERNAME && password === PASSWORD) {
+          const token = createToken({ username });
+          return { token };
+        }
+      } catch (error) {
+        console.log(error);
+      }
+
+      return h.response({ error: "Invalid username or password" }).code(401);
+    },
+  });
 
   // Route pour rechercher des données sur SWAPI avec authentification
   server.route({
     method: "GET",
     path: "/search",
     options: {
-      auth: "simple", // Cette route nécessite une authentification
+      auth: "jwt", // This route requires JWT authentication
       cors: {
         origin: ["*"], // You can specify specific origins instead of '*'
       },
@@ -104,7 +133,7 @@ const init = async () => {
     method: "GET",
     path: "/details",
     options: {
-      auth: "simple", // Cette route nécessite une authentification
+      auth: "jwt", // This route requires JWT authentication
       cors: {
         origin: ["*"], // You can specify specific origins instead of '*'
       },
